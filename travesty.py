@@ -295,10 +295,7 @@ class Travesty(IScannerCheck):
 
             # False Positive - Ignored variations
             ignored_variations = {u"set_cookie_names"}
-            filtered_variations = base_variations - ignored_variations
-            if len(base_variations - ignored_variations) == 0:
-                print "FP filter: not enough variations after filtering uninteresting variations"
-                continue
+
 
             # False Positive - Ignored status_codes
             ignored_status_codes = [302, 404]
@@ -340,9 +337,20 @@ class Travesty(IScannerCheck):
                 continue
 
 
+
+
+
             variations.updateWith([attack_reqresp.getResponse()])
+            new_variations = set(variations.getVariantAttributes())
+
+            # False positive - Not enough base variations
+            filtered_variations = base_variations - ignored_variations
+            if len(new_variations - ignored_variations) == 0:
+                print "FP filter: not enough variations after filtering uninteresting variations"
+                continue
+
             if is_baseline_stable:
-                new_variations = set(variations.getVariantAttributes())
+
                 if base_variations != new_variations:
                     # Found issue
                     print "Possible path-traversal found with path (stable baseline)", attack_path
