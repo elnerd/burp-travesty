@@ -325,9 +325,8 @@ class Travesty(IScannerCheck):
             is_dummy_stable, dummy_fuzz_ratio, dummy_variations, dummy_reqresp = get_baseline(baseRequestResponse.getHttpService(), dummy_request_data, attempts=3)
 
             dummy_variations.updateWith([attack_reqresp.getResponse()])
-            dum_variations = set(dummy_variations.getVariantAttributes())
 
-            if len(set(dummy_variations.getVari) - ignored_variations) == 0:
+            if len(set(dummy_variations.getVariantAttributes()) - ignored_variations) == 0:
                 print "FP: no variations between dummy response attack response"
                 continue
 
