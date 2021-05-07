@@ -113,7 +113,6 @@ def generate_test_paths(path):
     if not path.endswith("/"):
         filename = path.split("/")[-1]
         if "." in filename:
-            print "stripping filename"
             path = "/".join(path.split("/")[:-1])
 
     parts = path.split("/")
@@ -131,7 +130,6 @@ def generate_test_paths(path):
         #print "fetching baseline", "/".join(parts[0:i-1])
         #print "fetching traverse", "/".join(parts[0:i] + [".."])
         baseline_path = "/".join(parts[0:i-1]) + "/"
-        print "== baseline %s" % baseline_path
         up_path = "/".join(parts[0:i])
         dummy_path = hashlib.md5(str(hash(up_path))).hexdigest()[0:6]
         for traverse in attack_patterns:
@@ -149,7 +147,6 @@ def cached_baseline(fn):
         request_info = helpers.analyzeRequest(http_service, request_data)
         url = request_info.getUrl()
         key = "%s://%s%s" % (url.getProtocol(), url.getAuthority(), url.getPath())  # scheme://host/path
-        print "cached baseline key is %s" % key
         if key not in cache:
             res = fn(http_service, request_data, attempts)
             cache[key] = res # Todo, convert to Stored Requests to save memory
@@ -181,22 +178,19 @@ def get_baseline(http_service, request_data, attempts=3):
 
     print "== baselining with %d attempts==" % attempts
     while attempts >= 0:
-        print "attempts = %d" % attempts
         reqresp = callbacks.makeHttpRequest(http_service, request_data)
         all_reqresp.append(reqresp)
         if variations is None:
             variations = helpers.analyzeResponseVariations([reqresp.getResponse()])
+            attempts -= 1
+            continue
         else:
-            variations.updateWith(reqresp.getResponse())
+            variations.updateWith([reqresp.getResponse()])
 
         this_variations = set(variations.getVariantAttributes())
         this_invarations = set(variations.getInvariantAttributes())
 
-        print "this_variations:", this_variations
-        print "this_invariations:", this_invarations
-
         if len(this_variations) == 0:  # no variations, found a good baseline
-            print "found good baseline"
             return True, all_reqresp
 
         if last_variations is None and last_invariations is None:
@@ -208,10 +202,8 @@ def get_baseline(http_service, request_data, attempts=3):
 
         if last_variations == this_variations and last_invariations == last_variations:
             # No new variations / invariations
-            print "found good baseline"
             return True, all_reqresp
 
-        print "no baseline found in this round"
         attempts -= 1
         last_variations = this_variations
         last_invariations = this_invarations
@@ -272,11 +264,11 @@ class Travesty(IScannerCheck):
             else:
                 # Tested before, ignore
                 continue
-
-            print "creating baseline for path:", parent_path
+            print "Attacking:", attack_path
+            #print "creating baseline for path:", parent_path
             parent_request_data = insertion_point.buildRequest(helpers.stringToBytes(parent_path))
             is_baseline_stable, baseline_fuzz_ratio, variations, parent_reqresp = get_baseline(baseRequestResponse.getHttpService(), parent_request_data, attempts=3)
-            print "requesting path-traversal path:", attack_path
+            #print "requesting path-traversal path:", attack_path
             attack_request_data = insertion_point.buildRequest(helpers.stringToBytes(attack_path))
             attack_reqresp = callbacks.makeHttpRequest(
                 baseRequestResponse.getHttpService(), attack_request_data
@@ -284,8 +276,6 @@ class Travesty(IScannerCheck):
 
             base_variations = set(variations.getVariantAttributes())
             base_invariations = set(variations.getInvariantAttributes())
-            print "Base Variations:", base_variations
-            print "Base Invariations:", base_invariations
             parent_resp_info = helpers.analyzeResponse(parent_reqresp.getResponse())  # type: IResponseInfo
             parent_resp_body = parent_reqresp.getResponse()[parent_resp_info.getBodyOffset():]
 
@@ -298,9 +288,9 @@ class Travesty(IScannerCheck):
 
 
             # False Positive - Ignored status_codes
-            ignored_status_codes = [302, 404]
+            ignored_status_codes = [400,404]
+            ignored_status_codes.extend(range(300,400))  # Redirects ... could probably create some specific FP filters
             status_code = attack_resp_info.getStatusCode()
-            print "STATUS CODE:", status_code, type(status_code), status_code in ignored_status_codes
             if attack_resp_info.getStatusCode() in ignored_status_codes:
                 print "FP filter: ignored status codes [%d]" % (attack_resp_info.getStatusCode())
                 continue
@@ -315,7 +305,10 @@ class Travesty(IScannerCheck):
             # False positive - experimental - levenshtein distance between baseline response and attack response
             FUZZ_RATIO_MAX_INCREASE = 1.10
             if baseline_fuzz_ratio is not None:
-                if fuzz.ratio(parent_reqresp.getResponse(), attack_reqresp.getResponse())/100.0 > (baseline_fuzz_ratio/100.0)*FUZZ_RATIO_MAX_INCREASE:
+                this_fuzz_ratio = fuzz.ratio(parent_reqresp.getResponse(), attack_reqresp.getResponse())/100.0
+                print "dbg: this_fuzz_ratio:", this_fuzz_ratio
+                print "dbg: buzz_fuzz_ratio:", baseline_fuzz_ratio/100.0
+                if this_fuzz_ratio > (baseline_fuzz_ratio/100.0)*FUZZ_RATIO_MAX_INCREASE:
                     print "FP filter: levenshtein says no"
                     continue
 
